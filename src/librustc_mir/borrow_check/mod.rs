@@ -1753,6 +1753,27 @@ impl<'cx, 'tcx> MirBorrowckCtxt<'cx, 'tcx> {
         //    must have been initialized for the use to be sound.
         // 6. Move of `a.b.c` then reinit of `a.b.c.d`, use of `a.b.c.d`
 
+        // Polonius' move analysis essentially implements this whole function.
+        if let Some(polonius_results) = self.polonius_output.clone() {
+            // FIXME: why is this the mid-point? should it be?
+            let location_idx = self.location_table.mid_index(location);
+            if let Some(moved_paths) = polonius_results.move_errors.get(&location_idx) {
+                /* FIXME: figure out which one of these move paths was the one
+                actually being referenced and use that (possibly the most
+                specific one! */
+
+                for &uninit_mpi in moved_paths.iter() {
+                    self.report_use_of_moved_or_uninitialized(
+                        location,
+                        desired_action,
+                        (place_span.0, place_span.0, place_span.1),
+                        uninit_mpi,
+                    );
+                }
+            }
+            return;
+        }
+
         self.check_if_full_path_is_moved(location, desired_action, place_span, flow_state);
 
         if let [base_proj @ .., ProjectionElem::Subslice { from, to, from_end: false }] =
